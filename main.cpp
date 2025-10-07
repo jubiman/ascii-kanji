@@ -1,5 +1,6 @@
 #include <iostream>
 #include <locale>
+#include <vector>
 #include <fontconfig/fontconfig.h>
 
 // FreeType headers
@@ -10,8 +11,9 @@
 #include <format>
 #include <unicode/ustring.h>
 
-#define STR "火"
+#define STR "火炎"
 FT_ULong utf8ToCodePoint(const std::string& utf8);
+std::vector<uint32_t> utf8ToUnicode(const std::string& utf8);
 
 int main(const int argc, const char* argv[]) {
 	// Parse command-line arguments
@@ -35,9 +37,11 @@ int main(const int argc, const char* argv[]) {
 	}
 
 	FcCharSet* charset = FcCharSetCreate();
-	for (const char c : kanji) {
-		FcCharSetAddChar(charset, c);
-	}
+	// const FcChar32 code = utf8ToCodePoint(kanji);
+	// TODO: convert multiple characters?
+	for (const std::vector<uint32_t> utf32 = utf8ToUnicode(kanji); const auto code : utf32)
+		FcCharSetAddChar(charset, code);
+
 	FcPatternAddCharSet(pattern, FC_CHARSET, charset);
 	FcCharSetDestroy(charset);
 
@@ -68,28 +72,64 @@ int main(const int argc, const char* argv[]) {
 			FT_Select_Charmap(face, FT_ENCODING_UNICODE);
 
 			// Load and render glyph
-			const FT_ULong codepoint = utf8ToCodePoint(kanji);
+			// const FT_ULong codepoint = utf8ToCodePoint(kanji);
+			const std::vector<uint32_t> codes = utf8ToUnicode(kanji);
 			// if (FT_Load_Char(face, codepoint, FT_LOAD_RENDER)) {
 			// 	std::cerr << "Could not load glyph for character" << std::endl;
 			// 	FT_Done_Face(face);
 			// 	FT_Done_FreeType(ft);
 			// 	return 1;
 			// }
-			std::cout << "Codepoint: U+" << std::hex << codepoint << std::dec << std::endl;
-			FT_ULong charcode;
-			FT_UInt gid;
-
-			charcode = FT_Get_First_Char(face, &gid);
-			// TODO: seems like it uses a fallback font (not NotoSans Regular) for the glyph
-			//       how to get the actual font used?
-			while (gid != 0) {
-				if (charcode == 0x706b) {
-					std::cout << std::format("Codepoint: {:x}, gid: {}", charcode, gid) << std::endl;
-				}
-				charcode = FT_Get_Next_Char(face, charcode, &gid);
+			// std::cout << "Codepoint: U+" << std::hex << codepoint << std::dec << std::endl;
+			for (const auto codepoint : codes) {
+				std::cout << std::format("Codepoint: U+{:X}", codepoint) << std::endl;
 			}
-			const FT_UInt glyph_index = FT_Get_Char_Index(face, codepoint);
-			if (FT_Load_Glyph(face, glyph_index, FT_LOAD_RENDER)) {
+
+			// Draw the characters side by side
+			// const int padding = 2; // Padding between characters
+			// uint32_t totalWidth = 0;
+			// uint32_t maxHeight = 0;
+			// std::vector<FT_GlyphSlot> glyphs;
+			// for (const auto codepoint : codes) {
+			// 	if (const FT_UInt glyph_index = FT_Get_Char_Index(face, codepoint); FT_Load_Glyph(face, glyph_index, FT_LOAD_RENDER)) {
+			// 		std::cerr << "Could not load glyph for character" << std::endl;
+			// 		FT_Done_Face(face);
+			// 		FT_Done_FreeType(ft);
+			// 		return 1;
+			// 	}
+			// 	FT_GlyphSlot g = face->glyph;
+			// 	glyphs.push_back(g);
+			// 	totalWidth += g->bitmap.width + padding;
+			// 	if (g->bitmap.rows > maxHeight) {
+			// 		maxHeight = g->bitmap.rows;
+			// 	}
+			// }
+			// totalWidth -= padding; // Remove last padding
+			// std::vector<unsigned char> canvas(maxHeight * totalWidth, ' ');
+			// int xOffset = 0;
+			// for (const auto g : glyphs) {
+			// 	for (int y = 0; y < g->bitmap.rows; ++y) {
+			// 		for (int x = 0; x < g->bitmap.width; ++x) {
+			// 			constexpr int shades_len = 10;
+			// 			const auto shades = " .:-=+*#%@";
+			// 			const unsigned char pixel = g->bitmap.buffer[y * g->bitmap.width + x];
+			// 			const char ascii = shades[(pixel * (shades_len - 1)) / 255];
+			// 			// const char ascii = pixel ? '#' : ' ';
+			// 			canvas[y * totalWidth + xOffset + x] = ascii;
+			// 		}
+			// 	}
+			// 	xOffset += g->bitmap.width + padding;
+			// }
+			// // Print the canvas
+			// for (int y = 0; y < maxHeight; ++y) {
+			// 	for (int x = 0; x < totalWidth; ++x) {
+			// 		std::cout << canvas[y * totalWidth + x];
+			// 	}
+			// 	std::cout << std::endl;
+			// }
+
+			const uint32_t codepoint = codes[0]; // Just render the first character for now
+			if (const FT_UInt glyph_index = FT_Get_Char_Index(face, codepoint); FT_Load_Glyph(face, glyph_index, FT_LOAD_RENDER)) {
 				std::cerr << "Could not load glyph for character" << std::endl;
 				FT_Done_Face(face);
 				FT_Done_FreeType(ft);
@@ -103,8 +143,8 @@ int main(const int argc, const char* argv[]) {
 					constexpr int shades_len = 10;
 					const auto shades = " .:-=+*#%@";
 					const unsigned char pixel = g->bitmap.buffer[y * g->bitmap.width + x];
-					// const char ascii = shades[(pixel * (shades_len - 1)) / 255];
-					const char ascii = pixel ? '#' : ' ';
+					const char ascii = shades[(pixel * (shades_len - 1)) / 255];
+					// const char ascii = pixel ? '#' : ' ';
 					std::cout << ascii;
 				}
 				std::cout << std::endl;
@@ -151,4 +191,45 @@ FT_ULong utf8ToCodePoint(const std::string& utf8) {
 		codePoint = (codePoint << 6) | (byte & 0x3F);
 	}
 	return codePoint;
+}
+
+std::vector<uint32_t> utf8ToUnicode(const std::string& utf8) {
+	std::vector<uint32_t> codepoints;
+	if (utf8.empty()) return codepoints;
+
+	uint32_t codepoint = 0;
+	size_t i = 0;
+	while (i < utf8.size()) {
+		const auto firstByte = static_cast<uint8_t>(utf8[i]);
+		int numBytes = 0;
+		if ((firstByte & 0x80) == 0) {
+			codepoint = firstByte;
+			numBytes = 1;
+		} else if ((firstByte & 0xE0) == 0xC0) {
+			codepoint = firstByte & 0x1F;
+			numBytes = 2;
+		} else if ((firstByte & 0xF0) == 0xE0) {
+			codepoint = firstByte & 0x0F;
+			numBytes = 3;
+		} else if ((firstByte & 0xF8) == 0xF0) {
+			codepoint = firstByte & 0x07;
+			numBytes = 4;
+		} else {
+			++i; // Skip invalid byte
+			continue;
+		}
+		if (i + numBytes > utf8.size()) break; // Incomplete UTF-8
+		for (int j = 1; j < numBytes; ++j) {
+			const auto byte = static_cast<uint8_t>(utf8[i + j]);
+			if ((byte & 0xC0) != 0x80) {
+				numBytes = j; // Adjust to valid bytes only
+				break;
+			}
+			codepoint = (codepoint << 6) | (byte & 0x3F);
+		}
+		codepoints.push_back(codepoint);
+		i += numBytes;
+	}
+
+	return codepoints;
 }

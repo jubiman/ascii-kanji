@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 4.0)
+cmake_minimum_required(VERSION 3.30.5)
 project(ascii_kanji)
 
 set(CMAKE_CXX_STANDARD 20)
