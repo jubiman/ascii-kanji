@@ -81,7 +81,7 @@ int main(const int argc, const char* argv[]) {
 			const std::vector<uint32_t> codes = utf8ToUnicode(kanji);
 
 			// Draw the characters side by side
-			constexpr int padding = 2; // Padding between characters
+			constexpr int padding = 8; // Padding between characters
 			uint32_t totalWidth = 0;
 			uint32_t maxHeight = 0;
 			std::vector<GlyphBitmap> glyphs;
@@ -93,13 +93,14 @@ int main(const int argc, const char* argv[]) {
 					return 1;
 				}
 				FT_GlyphSlot g = face->glyph;
-				// Copy bitmap data
+				// Copy bitmap data, because otherwise we would overwrite the glyph pointer to the latest character
 				GlyphBitmap gb;
 				gb.width = g->bitmap.width;
 				gb.rows = g->bitmap.rows;
 				gb.pitch = g->bitmap.pitch;
 				gb.left = g->bitmap_left;
 				gb.top = g->bitmap_top;
+				// Copy bitmap buffer to a vector (since it is easier to use than raw pointer)
 				gb.buffer.assign(g->bitmap.buffer, g->bitmap.buffer + g->bitmap.width * g->bitmap.rows);
 				glyphs.push_back(std::move(gb));
 				totalWidth += g->bitmap.width + padding;
@@ -108,27 +109,34 @@ int main(const int argc, const char* argv[]) {
 				}
 			}
 			totalWidth -= padding; // Remove last padding
-			std::vector<unsigned char> canvas(maxHeight * totalWidth, ' ');
-			unsigned int xOffset = 0;
-			for (const auto& gb : glyphs) {
-				for (int y = 0; y < gb.rows; ++y) {
-					for (int x = 0; x < gb.width; ++x) {
-						constexpr int shades_len = 10;
-						const auto shades = " .:-=+*#%@";
-						const unsigned char pixel = gb.buffer[y * gb.width + x];
-						const char ascii = shades[(pixel * (shades_len - 1)) / 255];
-						canvas[y * totalWidth + xOffset + x] = ascii;
-					}
-				}
-				xOffset += gb.width + padding;
-			}
-			// Print the canvas
-			for (int y = 0; y < maxHeight; ++y) {
-				for (int x = 0; x < totalWidth; ++x) {
-					std::cout << canvas[y * totalWidth + x];
-				}
-				std::cout << std::endl;
-			}
+			// Find maximum top bearing for baseline alignment
+            int max_top = 0;
+            for (const auto& gb : glyphs) {
+                if (gb.top > max_top) max_top = gb.top;
+            }
+            std::vector<unsigned char> canvas(maxHeight * totalWidth, ' ');
+            unsigned int xOffset = 0;
+            for (const auto& gb : glyphs) {
+                const int yOffset = max_top - gb.top; // vertical offset for baseline alignment
+                for (int y = 0; y < gb.rows; ++y) {
+                    for (int x = 0; x < gb.width; ++x) {
+                        constexpr int shades_len = 10;
+                        const auto shades = " .:-=+*#%@";
+                        const unsigned char pixel = gb.buffer[y * gb.width + x];
+                        const char ascii = shades[(pixel * (shades_len - 1)) / 255];
+                        if (const int canvas_y = y + yOffset; canvas_y >= 0 && canvas_y < maxHeight)
+                            canvas[canvas_y * totalWidth + xOffset + x] = ascii;
+                    }
+                }
+                xOffset += gb.width + padding;
+            }
+            // Print the canvas
+            for (int y = 0; y < maxHeight; ++y) {
+                for (int x = 0; x < totalWidth; ++x) {
+                    std::cout << canvas[y * totalWidth + x];
+                }
+                std::cout << std::endl;
+            }
 
 			FT_Done_Face(face);
 			FT_Done_FreeType(ft);
